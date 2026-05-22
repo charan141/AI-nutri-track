@@ -15,6 +15,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +53,7 @@ import com.example.api.model.DeficiencyItem
 import com.example.data.model.DeficiencyAnalysis
 import com.example.data.model.IntakeRecord
 import com.example.ui.viewmodel.*
+import kotlinx.coroutines.launch
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -247,6 +249,28 @@ fun NutriTrackApp(viewModel: NutriViewModel) {
 
 // ======================== DASHBOARD SCREEN ========================
 
+// Helper models for interactive dashboard features
+data class QuickFoodItem(
+    val name: String,
+    val labelName: String,
+    val calories: Double,
+    val protein: Double,
+    val fiber: Double,
+    val vitamins: String,
+    val cardColor: Color,
+    val accentColor: Color
+)
+
+data class HealthTipItem(
+    val category: String,
+    val title: String,
+    val tip: String,
+    val rationale: String,
+    val icon: ImageVector,
+    val themeColor: Color,
+    val onThemeColor: Color
+)
+
 @Composable
 fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit) {
     val todaysIntakes by viewModel.todaysIntakes.collectAsState()
@@ -259,14 +283,84 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
 
     var showTargetDialog by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
-    ) {
-        // App Header - High Density Theme Style
+    // Interactive logging animation banner state
+    var lastLoggedFoodName by remember { mutableStateOf<String?>(null) }
+    var lastLoggedCalories by remember { mutableStateOf<Double>(0.0) }
+    var showLoggedAlert by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Interactive Health Tip section state
+    var currentTipIndex by remember { mutableStateOf(0) }
+    var isTipExpanded by remember { mutableStateOf(false) }
+
+    val favoritedFoods = listOf(
+        QuickFoodItem("Roti 🫓", "Wheat Roti", 120.0, 3.5, 2.4, "Vitamin B1, Iron", Color(0xFFF9F0E8), Color(0xFFC7803F)),
+        QuickFoodItem("Moong Dal 🍲", "Moong Dal", 150.0, 9.0, 4.5, "Folate, Potassium", Color(0xFFFFFBE6), Color(0xFFD4A310)),
+        QuickFoodItem("Paneer Bhurji 🧀", "Paneer Bhurji", 260.0, 18.0, 0.5, "Calcium, Vitamin B12", Color(0xFFEFFDF5), Color(0xFF0F9F58)),
+        QuickFoodItem("Boiled Egg 🍳", "Boiled Egg", 80.0, 6.0, 0.0, "Vitamin D, Selenium", Color(0xFFFFF4F4), Color(0xFFE94D4D)),
+        QuickFoodItem("Chicken Tikka 🍗", "Chicken Tikka", 220.0, 26.0, 0.0, "Niacin, Vitamin B6", Color(0xFFFEF7FF), Color(0xFF904D9D)),
+        QuickFoodItem("Sprouts Salad 🥗", "Mixed Salad", 90.0, 5.0, 3.5, "Vitamin C, Live Enzymes", Color(0xFFECFDFC), Color(0xFF14B8A6)),
+        QuickFoodItem("Buttermilk 🥛", "Glass of Buttermilk", 60.0, 3.0, 0.0, "Probiotics, Calcium", Color(0xFFF1F5F9), Color(0xFF64748B)),
+        QuickFoodItem("Foxnuts 🍿", "Roasted Makhana", 100.0, 2.5, 1.8, "Magnesium, Potassium", Color(0xFFFCFDF2), Color(0xFF8D9921))
+    )
+
+    val healthTips = listOf(
+        HealthTipItem(
+            category = "NITRATE BALANCE",
+            title = "Boost Vascular Flow with Garlic",
+            tip = "Raw garlic preserves volatile clinical allicin compounds.",
+            rationale = "Allicin relaxes vascular tension and encourages standard safe blood pressure regulation.",
+            icon = Icons.Default.Favorite,
+            themeColor = Color(0xFFFFEBEE),
+            onThemeColor = Color(0xFFB71C1C)
+        ),
+        HealthTipItem(
+            category = "IRON BIO-ABSORPTION",
+            title = "Pair Spinach with Fresh Lemon Juice",
+            tip = "Vitamin C doubles non-heme iron absorption.",
+            rationale = "Spinach contains non-heme iron which is difficult to extract. Pairs with Vitamin C (lemon juice) to break iron chelates, doubling systemic absorption!",
+            icon = Icons.Default.Spa,
+            themeColor = Color(0xFFE8F5E9),
+            onThemeColor = Color(0xFF1B5E20)
+        ),
+        HealthTipItem(
+            category = "GLYCEMIC CONTROL",
+            title = "Oats & Millets over White Rice",
+            tip = "Choose Jowar or Oats for a slow-release calorie flow.",
+            rationale = "Beta-glucan fibers form a gel that delays carbohydrate cleavage-hydrolysis, avoiding sudden glucose spikes.",
+            icon = Icons.Default.Restaurant,
+            themeColor = Color(0xFFFFF8E1),
+            onThemeColor = Color(0xFFE65100)
+        ),
+        HealthTipItem(
+            category = "PRE-MEAL PREPARATION",
+            title = "Drink Water 25 Minutes Before Eating",
+            tip = "Pre-hydration primes digestive mucosal enzymes.",
+            rationale = "Hydrating before eating stimulates early salivary amylases and primes gastric walls to enhance satiety signals, preventing accidental over-portions.",
+            icon = Icons.Default.Opacity,
+            themeColor = Color(0xFFE3F2FD),
+            onThemeColor = Color(0xFF0D47A1)
+        ),
+        HealthTipItem(
+            category = "VITAMIN D CONVERSION",
+            title = "Sun-Bathe Mushrooms Before Cooking",
+            tip = "Expose raw mushrooms to solar rays for 30 minutes.",
+            rationale = "Direct sunlight stimulates conversion of mushroom ergosterols into functional bio-active Vitamin D2, supporting healthy skeletal density.",
+            icon = Icons.Default.WbSunny,
+            themeColor = Color(0xFFF3E5F5),
+            onThemeColor = Color(0xFF4A148C)
+        )
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 24.dp)
+        ) {
+            // App Header - High Density Theme Style
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -746,6 +840,272 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
             DiseaseRecommendationsSection(viewModel = viewModel)
         }
 
+        // 1. Quick Log Popular Foods Section
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = "Quick Log",
+                            tint = Color(0xFFFF9800),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Quick Log Favorites",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF191C1E)
+                        )
+                    }
+                    Text(
+                        text = "1-Tap Add",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0061A4),
+                        modifier = Modifier
+                            .background(Color(0xFFD1E4FF), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(favoritedFoods) { food ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = food.cardColor),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, food.accentColor.copy(alpha = 0.2f)),
+                            modifier = Modifier
+                                .width(135.dp)
+                                .clickable {
+                                    viewModel.addIntake(
+                                        food.labelName,
+                                        food.calories,
+                                        food.protein,
+                                        food.fiber,
+                                        food.vitamins
+                                    )
+                                    lastLoggedFoodName = food.name
+                                    lastLoggedCalories = food.calories
+                                    showLoggedAlert = true
+                                    coroutineScope.launch {
+                                        kotlinx.coroutines.delay(3000)
+                                        showLoggedAlert = false
+                                    }
+                                }
+                                .testTag("quick_log_food_${food.name.replace(" ", "_")}")
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Restaurant,
+                                        contentDescription = null,
+                                        tint = food.accentColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.AddCircle,
+                                        contentDescription = "Add instantly",
+                                        tint = food.accentColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Text(
+                                    text = food.name,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF191C1E),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                    Text(
+                                        text = "${food.calories.toInt()} kcal",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF44474E)
+                                    )
+                                    Text(
+                                        text = "P: ${food.protein}g  | F: ${food.fiber}g",
+                                        fontSize = 9.sp,
+                                        color = Color(0xFF44474E)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Interactive Health Tip of the Day Section (Collapsible & Shuffleable)
+        item {
+            val tipItem = healthTips[currentTipIndex]
+            Card(
+                colors = CardDefaults.cardColors(containerColor = tipItem.themeColor),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, tipItem.onThemeColor.copy(alpha = 0.15f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isTipExpanded = !isTipExpanded }
+                    .testTag("health_tip_card_${currentTipIndex}")
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = tipItem.category,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = tipItem.onThemeColor,
+                                modifier = Modifier
+                                    .background(tipItem.onThemeColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Shuffle tip button
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .background(Color.White.copy(alpha = 0.8f), CircleShape)
+                                    .clickable {
+                                        currentTipIndex = (currentTipIndex + 1) % healthTips.size
+                                    }
+                                    .testTag("shuffle_tips_btn"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Shuffle,
+                                    contentDescription = "Next health tip",
+                                    tint = tipItem.onThemeColor,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = tipItem.title,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF191C1E)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color.White.copy(alpha = 0.8f), RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = tipItem.icon,
+                                contentDescription = tipItem.category,
+                                tint = tipItem.onThemeColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = tipItem.tip,
+                                fontSize = 12.sp,
+                                color = Color(0xFF44474E),
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isTipExpanded) "Read less ▲" else "Tap card to read science fact ▼",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = tipItem.onThemeColor
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = isTipExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color.White.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                                .padding(10.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = "Science Details",
+                                    tint = tipItem.onThemeColor,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "SCIENTIFIC RATIONALE",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = tipItem.onThemeColor,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = tipItem.rationale,
+                                fontSize = 11.sp,
+                                color = Color(0xFF191C1E),
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Intake logging heading
         item {
             Row(
@@ -841,6 +1201,68 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+
+    // Floating interactive success toast banner slider overlay
+    AnimatedVisibility(
+        visible = showLoggedAlert,
+        enter = slideInVertically { it } + fadeIn(),
+        exit = slideOutVertically { it } + fadeOut(),
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 16.dp, start = 16.dp, end = 16.dp)
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF001D36)),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFD1E4FF), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Success checkmark",
+                            tint = Color(0xFF001D36),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "Successfully Logged $lastLoggedFoodName!",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "+${lastLoggedCalories.toInt()} Calories added dynamically to targets.",
+                            color = Color(0xFFDDE3EA),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = { showLoggedAlert = false },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFD1E4FF))
+                ) {
+                    Text("Dismiss", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
 
     if (showTargetDialog) {
         ProfileAndTargetDialog(
