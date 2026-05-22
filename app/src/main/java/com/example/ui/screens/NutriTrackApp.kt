@@ -250,6 +250,7 @@ fun NutriTrackApp(viewModel: NutriViewModel) {
 @Composable
 fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit) {
     val todaysIntakes by viewModel.todaysIntakes.collectAsState()
+    val selectedDate by viewModel.selectedDate.collectAsState()
     val totals by viewModel.todaysTotals.collectAsState()
     val targetCalories by viewModel.targetCalories.collectAsState()
     val targetProtein by viewModel.targetProtein.collectAsState()
@@ -433,6 +434,11 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
                     }
                 }
             }
+        }
+
+        // Interactive Habits Calendar
+        item {
+            HabitsCalendarSection(viewModel = viewModel)
         }
 
         // Main Progress Summary (Calories card & progress percentage indicator)
@@ -740,11 +746,6 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
             DiseaseRecommendationsSection(viewModel = viewModel)
         }
 
-        // Weekly personalized Indian meal planner curated based on profile
-        item {
-            IndianWeeklyMealPlannerSection(viewModel = viewModel)
-        }
-
         // Intake logging heading
         item {
             Row(
@@ -752,8 +753,14 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val isSelectedToday = {
+                    val today = Calendar.getInstance()
+                    today.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR) &&
+                    today.get(Calendar.DAY_OF_YEAR) == selectedDate.get(Calendar.DAY_OF_YEAR)
+                }()
+                val dateStr = if (isSelectedToday) "Today" else SimpleDateFormat("MMM d", Locale.getDefault()).format(selectedDate.time)
                 Text(
-                    text = "Recent Intake (${todaysIntakes.size})",
+                    text = "Logged Food for $dateStr (${todaysIntakes.size})",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF191C1E)
@@ -825,6 +832,13 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
             items(todaysIntakes) { intake ->
                 FoodIntakeRow(intake = intake, onDelete = { viewModel.deleteIntake(intake) })
             }
+        }
+
+        // Weekly personalized Indian meal planner curated based on profile - Moved to Bottom
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            IndianWeeklyMealPlannerSection(viewModel = viewModel)
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 
@@ -3035,4 +3049,380 @@ fun MealRowItem(type: String, meal: String) {
             )
         }
     }
+}
+
+@Composable
+fun HabitsCalendarSection(viewModel: NutriViewModel) {
+    val selectedDate by viewModel.selectedDate.collectAsState()
+    val allIntakes by viewModel.allIntakes.collectAsState()
+    
+    // Maintain a state for the currently displayed month in the full-view calendar navigation
+    var currentMonthCalendar by remember { 
+        mutableStateOf(Calendar.getInstance().apply { 
+            timeInMillis = selectedDate.timeInMillis 
+        }) 
+    }
+    
+    // Track whether the month picker drawer is expanded
+    var isExpanded by remember { mutableStateOf(false) }
+    
+    // A quick check to see if she/he has any food logged on a specific day
+    val hasLogsOnDay = { dayCal: Calendar ->
+        allIntakes.any { record ->
+            val recordCal = Calendar.getInstance().apply { timeInMillis = record.timestamp }
+            recordCal.get(Calendar.YEAR) == dayCal.get(Calendar.YEAR) &&
+            recordCal.get(Calendar.DAY_OF_YEAR) == dayCal.get(Calendar.DAY_OF_YEAR)
+        }
+    }
+    
+    val sdfMonthYear = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+    val sdfFullDate = SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault())
+    
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Color(0xFFDDE3EA)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("habits_calendar_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Calendar Title bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CalendarMonth,
+                        contentDescription = "Calendar",
+                        tint = Color(0xFF0061A4),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Intake Calendar",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF191C1E)
+                    )
+                }
+                
+                // Expand / Collapse Drawer button
+                IconButton(
+                    onClick = { isExpanded = !isExpanded },
+                    modifier = Modifier.size(32.dp).testTag("calendar_expand_btn")
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = "Toggle Month Calendar View",
+                        tint = Color(0xFF0061A4)
+                    )
+                }
+            }
+            
+            // Selected Date Indicator text
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = sdfFullDate.format(selectedDate.time),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF003355)
+                )
+                
+                // If selected date is NOT today, show "Back to Today" button
+                val isTodaySelected = {
+                    val today = Calendar.getInstance()
+                    today.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR) &&
+                    today.get(Calendar.DAY_OF_YEAR) == selectedDate.get(Calendar.DAY_OF_YEAR)
+                }()
+                
+                if (!isTodaySelected) {
+                    Text(
+                        text = "Go to Today",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0061A4),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFD1E4FF))
+                            .clickable { 
+                                viewModel.selectToday() 
+                                currentMonthCalendar = Calendar.getInstance()
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .testTag("calendar_go_today_btn")
+                    )
+                }
+            }
+            
+            // WEEK BAR VIEW (always visible)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val weekDays = getDaysOfCurrentWeek(selectedDate)
+                val dayOfWeekLabels = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+                
+                weekDays.forEachIndexed { index, dayCal ->
+                    val isSelected = dayCal.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR) &&
+                                     dayCal.get(Calendar.DAY_OF_YEAR) == selectedDate.get(Calendar.DAY_OF_YEAR)
+                                     
+                    val isToday = {
+                        val today = Calendar.getInstance()
+                        today.get(Calendar.YEAR) == dayCal.get(Calendar.YEAR) &&
+                        today.get(Calendar.DAY_OF_YEAR) == dayCal.get(Calendar.DAY_OF_YEAR)
+                    }()
+                    
+                    val hasLogs = hasLogsOnDay(dayCal)
+                    
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                when {
+                                    isSelected -> Color(0xFF0061A4)
+                                    isToday -> Color(0xFFD1E4FF).copy(alpha = 0.5f)
+                                    else -> Color.Transparent
+                                }
+                            )
+                            .clickable { viewModel.selectCalendarDate(dayCal) }
+                            .padding(vertical = 8.dp)
+                            .testTag("calendar_week_day_${dayCal.get(Calendar.DAY_OF_MONTH)}")
+                    ) {
+                        Text(
+                            text = dayOfWeekLabels[index],
+                            fontSize = 10.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color.White else Color(0xFF44474E)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = dayCal.get(Calendar.DAY_OF_MONTH).toString(),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) Color.White else Color(0xFF191C1E)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        // Habit dot indicator
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when {
+                                        isSelected -> Color.White
+                                        hasLogs -> Color(0xFFF25A24) // Log dot
+                                        else -> Color.Transparent
+                                    }
+                                )
+                        )
+                    }
+                }
+            }
+            
+            // COMPACT MONTH PICKER DRAWER (Visible when expanded)
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFF3F4F9), RoundedCornerShape(16.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Month Picker Header with Navigation arrows
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                val prev = currentMonthCalendar.clone() as Calendar
+                                prev.add(Calendar.MONTH, -1)
+                                currentMonthCalendar = prev
+                            },
+                            modifier = Modifier.size(32.dp).testTag("calendar_prev_month_btn")
+                        ) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Previous Month", modifier = Modifier.size(16.dp))
+                        }
+                        
+                        Text(
+                            text = sdfMonthYear.format(currentMonthCalendar.time),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF191C1E)
+                        )
+                        
+                        IconButton(
+                            onClick = {
+                                val next = currentMonthCalendar.clone() as Calendar
+                                next.add(Calendar.MONTH, 1)
+                                currentMonthCalendar = next
+                            },
+                            modifier = Modifier.size(32.dp).testTag("calendar_next_month_btn")
+                        ) {
+                            Icon(Icons.Default.ArrowForward, contentDescription = "Next Month", modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    
+                    // Month Grid Labels
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        listOf("S", "M", "T", "W", "T", "F", "S").forEach { label ->
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF44474E),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    
+                    // Month Grid Days
+                    val daysInMonth = getDaysInMonth(
+                        currentMonthCalendar.get(Calendar.YEAR),
+                        currentMonthCalendar.get(Calendar.MONTH)
+                    )
+                    
+                    // Group to weeks (rows of 7 elements)
+                    val rows = daysInMonth.chunked(7)
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        rows.forEach { week ->
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                week.forEach { dayCal ->
+                                    if (dayCal == null) {
+                                        Box(modifier = Modifier.weight(1f))
+                                    } else {
+                                        val isCurrentSelected = dayCal.get(Calendar.YEAR) == selectedDate.get(Calendar.YEAR) &&
+                                                                 dayCal.get(Calendar.DAY_OF_YEAR) == selectedDate.get(Calendar.DAY_OF_YEAR)
+                                        
+                                        val isToday = {
+                                            val today = Calendar.getInstance()
+                                            today.get(Calendar.YEAR) == dayCal.get(Calendar.YEAR) &&
+                                            today.get(Calendar.DAY_OF_YEAR) == dayCal.get(Calendar.DAY_OF_YEAR)
+                                        }()
+                                        
+                                        val hasLogs = hasLogsOnDay(dayCal)
+                                        
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .aspectRatio(1f)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    when {
+                                                        isCurrentSelected -> Color(0xFF0061A4)
+                                                        isToday -> Color(0xFFD1E4FF)
+                                                        else -> Color.Transparent
+                                                    }
+                                                )
+                                                .clickable { viewModel.selectCalendarDate(dayCal) }
+                                                .testTag("calendar_grid_day_${dayCal.get(Calendar.DAY_OF_MONTH)}")
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text(
+                                                    text = dayCal.get(Calendar.DAY_OF_MONTH).toString(),
+                                                    fontSize = 11.sp,
+                                                    fontWeight = if (isCurrentSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+                                                    color = when {
+                                                        isCurrentSelected -> Color.White
+                                                        isToday -> Color(0xFF001D36)
+                                                        else -> Color(0xFF191C1E)
+                                                    }
+                                                )
+                                                if (hasLogs) {
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(3.dp)
+                                                            .clip(CircleShape)
+                                                            .background(if (isCurrentSelected) Color.White else Color(0xFFF25A24))
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Pads the last week row if it lists less than 7 elements style-wise
+                                if (week.size < 7) {
+                                    for (i in 0 until (7 - week.size)) {
+                                        Box(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun getDaysOfCurrentWeek(aroundDate: Calendar): List<Calendar> {
+    val list = mutableListOf<Calendar>()
+    val temp = aroundDate.clone() as Calendar
+    val firstDayOfWeek = temp.get(Calendar.DAY_OF_WEEK)
+    temp.add(Calendar.DAY_OF_MONTH, -(firstDayOfWeek - 1))
+    
+    for (i in 0 until 7) {
+        list.add(temp.clone() as Calendar)
+        temp.add(Calendar.DAY_OF_MONTH, 1)
+    }
+    return list
+}
+
+fun getDaysInMonth(year: Int, month: Int): List<Calendar?> {
+    val days = mutableListOf<Calendar?>()
+    val cal = Calendar.getInstance().apply {
+        set(Calendar.YEAR, year)
+        set(Calendar.MONTH, month)
+        set(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    
+    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+    
+    for (i in 1 until firstDayOfWeek) {
+        days.add(null)
+    }
+    
+    val maxDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+    for (d in 1..maxDays) {
+        val dayCal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month)
+            set(Calendar.DAY_OF_MONTH, d)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        days.add(dayCal)
+    }
+    return days
 }

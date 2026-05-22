@@ -1,6 +1,7 @@
 package com.example.ui.viewmodel
 
 import android.graphics.Bitmap
+import java.util.Calendar
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -188,8 +189,56 @@ class NutriViewModel(
     val allIntakes: StateFlow<List<IntakeRecord>> = repository.allIntakeRecords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val todaysIntakes: StateFlow<List<IntakeRecord>> = repository.getIntakeForToday()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Selected Date state (with clean hours/minutes/seconds)
+    private val _selectedDate = MutableStateFlow(Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    })
+    val selectedDate: StateFlow<Calendar> = _selectedDate.asStateFlow()
+
+    fun selectDate(year: Int, month: Int, day: Int) {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, year)
+            set(Calendar.MONTH, month)
+            set(Calendar.DAY_OF_MONTH, day)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        _selectedDate.value = cal
+    }
+
+    fun selectCalendarDate(cal: Calendar) {
+        val clean = Calendar.getInstance().apply {
+            timeInMillis = cal.timeInMillis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        _selectedDate.value = clean
+    }
+
+    fun selectToday() {
+        _selectedDate.value = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+    }
+
+    // Dynamic intake records for the currently selected date
+    val todaysIntakes: StateFlow<List<IntakeRecord>> = combine(allIntakes, _selectedDate) { intakes, dateCal ->
+        intakes.filter { record ->
+            val recordCal = Calendar.getInstance().apply { timeInMillis = record.timestamp }
+            recordCal.get(Calendar.YEAR) == dateCal.get(Calendar.YEAR) &&
+            recordCal.get(Calendar.DAY_OF_YEAR) == dateCal.get(Calendar.DAY_OF_YEAR)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Deficiency Analysis History
     val allDeficiencyAnalyses: StateFlow<List<DeficiencyAnalysis>> = repository.allDeficiencyAnalyses
@@ -330,16 +379,39 @@ class NutriViewModel(
     // Insert manually inputted foods, scanned results, or AI parsed ones
     fun addIntake(name: String, calories: Double, protein: Double, fiber: Double, vitamins: String = "") {
         viewModelScope.launch {
+            val selectedCal = _selectedDate.value
+            val isTodayVal = isToday(selectedCal)
+            val recordTimestamp = if (isTodayVal) {
+                System.currentTimeMillis()
+            } else {
+                val now = Calendar.getInstance()
+                val target = Calendar.getInstance().apply {
+                    timeInMillis = selectedCal.timeInMillis
+                    set(Calendar.HOUR_OF_DAY, now.get(Calendar.HOUR_OF_DAY))
+                    set(Calendar.MINUTE, now.get(Calendar.MINUTE))
+                    set(Calendar.SECOND, now.get(Calendar.SECOND))
+                    set(Calendar.MILLISECOND, now.get(Calendar.MILLISECOND))
+                }
+                target.timeInMillis
+            }
+
             repository.insertIntake(
                 IntakeRecord(
                     foodName = name,
                     caloriesKcal = calories,
                     proteinGrams = protein,
                     fiberGrams = fiber,
-                    vitamins = vitamins
+                    vitamins = vitamins,
+                    timestamp = recordTimestamp
                 )
             )
         }
+    }
+
+    private fun isToday(cal: Calendar): Boolean {
+        val today = Calendar.getInstance()
+        return today.get(Calendar.YEAR) == cal.get(Calendar.YEAR) &&
+               today.get(Calendar.DAY_OF_YEAR) == cal.get(Calendar.DAY_OF_YEAR)
     }
 
     fun calculateNutrientsFromText(foodDescription: String, onCompleted: (Boolean) -> Unit = {}) {
