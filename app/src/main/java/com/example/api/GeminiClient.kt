@@ -309,7 +309,7 @@ object GeminiClient {
             - Weight: $weightKg kg
             - Pre-existing medical conditions/deficiencies/diseases: ${diseases.ifBlank { "None" }}
 
-            Make sure the recommended foods are healthy, traditional, and easily available Indian meals (including items like Roti, Sabzi, Poha, Idli, Dal, Paneer, Khichdi, etc.) fitted to help their conditions.
+            Make sure the recommended foods are healthy, traditional, and easily available Indian meals—prioritizing healthy South Indian food options (including items like Idli & Sambar, Masala Dosa, Millet Pongal, Medu Vada, Rava Upma, Curd Rice, Sambar, and Rasam & Rice, in addition to Roti, Sabzi, Poha, Dal, Paneer, and Khichdi)—fitted specifically to help their conditions.
 
             Return ONLY a valid JSON object matching this schema:
             {
@@ -548,11 +548,11 @@ object GeminiClient {
             )
             else -> listOf(
                 "2 Rotis, Dal Tadka, Aloo Gobhi, Cucumber Salad (Protein: 13g)",
-                "1 cup Basmati Rice, Rajma Curry, Curd, Salad (Protein: 16g)",
+                "Steamed Rice with Tomato Garlic Rasam, Cabbage Poriyal (Protein: 6g)",
                 "2 Rotis, Paneer butter masala (light), Mixed salad",
-                "1 cup Jeera Rice, Chana Masala, Mint Raita, Salad (Protein: 14g)",
+                "Tempered Curd Rice with beetroot salad (Protein: 7g)",
                 "2 Multigrain Rotis, Soya chunks curry, Stir-fry Bhindi",
-                "1 cup Rice, Moong Dal, Egg bhurji, Carrot salad (Protein: 19g)",
+                "Steamed Rice, Sambar (1 Bowl), Egg Bhurji, Carrot Salad (Protein: 15g)",
                 "2 Rotis, Chicken Curry (or Mushroom Mattar Paneer), Salad"
             )
         }
@@ -578,11 +578,11 @@ object GeminiClient {
             )
             else -> listOf(
                 "Moong Dal Khichdi, Papad, Tomato chutney (Protein: 9g, Fiber: 4g)",
-                "2 Rotis, Lauki (Bottle gourd) curry, Yogurt (Warm & digestive)",
+                "Millet Pongal with Sambar (Protein: 10g, Fiber: 6g)",
                 "1 Roti, Paneer Bhurji, Spinach curry (Protein: 18g, Fiber: 5g)",
-                "Vegetable soup, sourdough toast with hummus (Protein: 10g)",
+                "2 South Indian Idli with mixed vegetable Sambar (Protein: 11g)",
                 "2 Rotis, Masoor Dal, Bhindi fry, Curd (Protein: 14g, Fiber: 6g)",
-                "Light vegetable Pulao, Curd, Salad (Digestive ease)",
+                "Rava Upma with roasted peanuts & green peas (Protein: 8g)",
                 "Boiled eggs (2) with multigrain Roti and Dal (Protein: 21g)"
             )
         }
