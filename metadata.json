@@ -1,0 +1,6 @@
+{
+  "name": "NutriTrack AI",
+  "description": "Track protein, fiber, and calorie intake using scanned food label images and analyze vitamin deficiencies with personalized suggestions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
