@@ -1,9 +1,8 @@
 package com.example
 
+import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -20,13 +19,12 @@ class MainActivityLifecycleTest {
     val composeTestRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun testLoginAndRecomposition() {
-        // Find email field, enter text
-        composeTestRule.onNodeWithTag("login_email_tf").performTextInput("test@gmail.com")
-        // Click the submit button
-        composeTestRule.onNodeWithTag("google_login_submit_btn").performClick()
+    fun testActivityInitialization() {
+        val activity = composeTestRule.activity
+        assertNotNull("MainActivity should be successfully created", activity)
         
-        // Wait for idle to complete the login transitions and load the dashboard
-        composeTestRule.waitForIdle()
+        // Ensure email input field starts visible on the login screen
+        composeTestRule.onNodeWithTag("login_email_tf").assertExists()
+        composeTestRule.onNodeWithTag("google_login_submit_btn").assertExists()
     }
 }

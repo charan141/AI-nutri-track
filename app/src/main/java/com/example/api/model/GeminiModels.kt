@@ -82,3 +82,33 @@ data class FoodAnalysisResult(
     val fiber: Double,
     val vitamins: String
 )
+
+// Dynamic Indian Weekly Meal Chart Models
+@JsonClass(generateAdapter = true)
+data class MealDay(
+    val day: String,
+    val breakfast: String,
+    val lunch: String,
+    val dinner: String,
+    val snacks: String
+)
+
+@JsonClass(generateAdapter = true)
+data class WeeklyMealChartResult(
+    val title: String,
+    val description: String,
+    val days: List<MealDay>
+)
+
+// Disease and Deficiency Recommendation Models
+@JsonClass(generateAdapter = true)
+data class DiseaseFoodRecommendation(
+    val condition: String,
+    val recommendedFoods: List<String>,
+    val reason: String
+)
+
+@JsonClass(generateAdapter = true)
+data class DiseaseFoodRecommendationsResult(
+    val recommendations: List<DiseaseFoodRecommendation>
+)

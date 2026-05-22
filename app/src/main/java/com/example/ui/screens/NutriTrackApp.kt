@@ -7,6 +7,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,9 +51,7 @@ import coil.compose.AsyncImage
 import com.example.api.model.DeficiencyItem
 import com.example.data.model.DeficiencyAnalysis
 import com.example.data.model.IntakeRecord
-import com.example.ui.viewmodel.DeficiencyUiState
-import com.example.ui.viewmodel.NutriViewModel
-import com.example.ui.viewmodel.ScanUiState
+import com.example.ui.viewmodel.*
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -169,6 +169,11 @@ fun NutriTrackApp(viewModel: NutriViewModel) {
         WelcomeLoginScreen(viewModel = viewModel)
     } else {
         var selectedTab by remember { mutableStateOf<AppTab>(AppTab.Dashboard) }
+
+        // Intercept back navigation to return to Dashboard tab gracefully
+        BackHandler(enabled = selectedTab != AppTab.Dashboard) {
+            selectedTab = AppTab.Dashboard
+        }
 
         // Edge to Edge light grey canvas of High Density theme
         Scaffold(
@@ -305,7 +310,8 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
                         .clip(CircleShape)
                         .border(2.dp, Color(0xFFD1E4FF), CircleShape)
                         .background(Color.White)
-                        .clickable { showTargetDialog = true },
+                        .clickable { showTargetDialog = true }
+                        .testTag("dashboard_edit_targets_btn"),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -729,6 +735,16 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
             }
         }
 
+        // Disease & Deficiencies Recommendations Card
+        item {
+            DiseaseRecommendationsSection(viewModel = viewModel)
+        }
+
+        // Weekly personalized Indian meal planner curated based on profile
+        item {
+            IndianWeeklyMealPlannerSection(viewModel = viewModel)
+        }
+
         // Intake logging heading
         item {
             Row(
@@ -813,17 +829,9 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
     }
 
     if (showTargetDialog) {
-        TargetInputDialog(
-            currentCalories = targetCalories,
-            currentProtein = targetProtein,
-            currentFiber = targetFiber,
-            onDismiss = { showTargetDialog = false },
-            onSave = { cal, prot, fib ->
-                viewModel.setTargetCalories(cal)
-                viewModel.setTargetProtein(prot)
-                viewModel.setTargetFiber(fib)
-                showTargetDialog = false
-            }
+        ProfileAndTargetDialog(
+            viewModel = viewModel,
+            onDismiss = { showTargetDialog = false }
         )
     }
 }
@@ -2194,92 +2202,316 @@ fun ManualAddDialog(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TargetInputDialog(
-    currentCalories: Double,
-    currentProtein: Double,
-    currentFiber: Double,
-    onDismiss: () -> Unit,
-    onSave: (Double, Double, Double) -> Unit
+fun ProfileAndTargetDialog(
+    viewModel: NutriViewModel,
+    onDismiss: () -> Unit
 ) {
-    var calories by remember { mutableStateOf(currentCalories.toInt().toString()) }
-    var protein by remember { mutableStateOf(currentProtein.toInt().toString()) }
-    var fiber by remember { mutableStateOf(currentFiber.toInt().toString()) }
+    val heightVal by viewModel.userHeight.collectAsState()
+    val weightVal by viewModel.userWeight.collectAsState()
+    val genderVal by viewModel.userGender.collectAsState()
+    val conditionsVal by viewModel.userConditions.collectAsState()
+    
+    val currentCalories by viewModel.targetCalories.collectAsState()
+    val currentProtein by viewModel.targetProtein.collectAsState()
+    val currentFiber by viewModel.targetFiber.collectAsState()
+
+    var heightInput by remember { mutableStateOf(if (heightVal > 0) heightVal.toInt().toString() else "170") }
+    var weightInput by remember { mutableStateOf(if (weightVal > 0) weightVal.toInt().toString() else "65") }
+    var genderSelection by remember { mutableStateOf(genderVal) }
+    var conditionsInput by remember { mutableStateOf(conditionsVal) }
+
+    var calTarget by remember { mutableStateOf(currentCalories.toInt().toString()) }
+    var protTarget by remember { mutableStateOf(currentProtein.toInt().toString()) }
+    var fibTarget by remember { mutableStateOf(currentFiber.toInt().toString()) }
+
+    var autoApplyRecommendation by remember { mutableStateOf(true) }
+
+    val presetConditions = listOf("Anemia", "Thyroid", "Diabetes", "Vitamin D Deficiency", "High Blood Pressure", "Gluten Sensitivity", "Lactose Intolerance")
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
             colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(24.dp),
             border = BorderStroke(1.dp, Color(0xFFDDE3EA)),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp)
         ) {
             Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .padding(18.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.BarChart, contentDescription = "Edit Targets", tint = Color(0xFF0061A4))
-                    Text(text = "Edit Daily Targets", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFF191C1E))
+                    Icon(
+                        imageVector = Icons.Default.HealthAndSafety,
+                        contentDescription = "Edit Profile & Targets",
+                        tint = Color(0xFF0061A4),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "Physical Profile & Goals",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF191C1E)
+                    )
                 }
 
                 Text(
-                    text = "Set daily target standards for tracking macro progress.",
+                    text = "Provide your body dimensions and health background to automatically recommend appropriate micro-targets.",
                     fontSize = 12.sp,
                     color = Color(0xFF44474E)
                 )
 
-                OutlinedTextField(
-                    value = calories,
-                    onValueChange = { calories = it },
-                    label = { Text("Calories Target (kcal)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0061A4),
-                        focusedLabelColor = Color(0xFF0061A4),
-                        unfocusedBorderColor = Color(0xFFC4C6D0),
-                        unfocusedTextColor = Color(0xFF191C1E),
-                        focusedTextColor = Color(0xFF191C1E)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("target_cal_tf")
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = heightInput,
+                        onValueChange = { heightInput = it },
+                        label = { Text("Height (cm)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0061A4),
+                            focusedLabelColor = Color(0xFF0061A4)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("profile_height_tf")
+                    )
 
-                OutlinedTextField(
-                    value = protein,
-                    onValueChange = { protein = it },
-                    label = { Text("Protein Target (g)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0061A4),
-                        focusedLabelColor = Color(0xFF0061A4),
-                        unfocusedBorderColor = Color(0xFFC4C6D0),
-                        unfocusedTextColor = Color(0xFF191C1E),
-                        focusedTextColor = Color(0xFF191C1E)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("target_prot_tf")
-                )
+                    OutlinedTextField(
+                        value = weightInput,
+                        onValueChange = { weightInput = it },
+                        label = { Text("Weight (kg)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0061A4),
+                            focusedLabelColor = Color(0xFF0061A4)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("profile_weight_tf")
+                    )
+                }
 
-                OutlinedTextField(
-                    value = fiber,
-                    onValueChange = { fiber = it },
-                    label = { Text("Fiber Target (g)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0061A4),
-                        focusedLabelColor = Color(0xFF0061A4),
-                        unfocusedBorderColor = Color(0xFFC4C6D0),
-                        unfocusedTextColor = Color(0xFF191C1E),
-                        focusedTextColor = Color(0xFF191C1E)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("target_fiber_tf")
-                )
+                // Gender Selection Segmented Row
+                Column {
+                    Text(
+                        text = "Gender Selection",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF44474E)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFFC4C6D0), RoundedCornerShape(8.dp))
+                    ) {
+                        listOf("Male", "Female", "Other").forEachIndexed { idx, gender ->
+                            val isSelected = genderSelection.equals(gender, ignoreCase = true)
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(if (isSelected) Color(0xFFD1E4FF) else Color.Transparent)
+                                    .clickable { genderSelection = gender }
+                                    .padding(vertical = 10.dp)
+                                    .testTag("gender_btn_$gender")
+                            ) {
+                                Text(
+                                    text = gender,
+                                    fontSize = 13.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) Color(0xFF001D36) else Color(0xFF44474E)
+                                )
+                            }
+                            if (idx < 2) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(1.dp)
+                                        .height(38.dp)
+                                        .background(Color(0xFFC4C6D0))
+                                )
+                            }
+                        }
+                    }
+                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                // Pre-existing conditions
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.Healing, contentDescription = "Deficiencies Icon", tint = Color(0xFF0061A4), modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Pre-existing Deficiencies / Diseases",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF191C1E)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = conditionsInput,
+                        onValueChange = { conditionsInput = it },
+                        placeholder = { Text("e.g. Anemia, Diabetes, Vitamin D Deficiency") },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0061A4),
+                            focusedLabelColor = Color(0xFF0061A4)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_diseases_tf")
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Quick Suggestion Presets:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF44474E)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // FlowRow to show preset clickers
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        presetConditions.forEach { condition ->
+                            AssistChip(
+                                onClick = {
+                                    val current = conditionsInput.trim()
+                                    if (current.isBlank()) {
+                                        conditionsInput = condition
+                                    } else if (!current.contains(condition, ignoreCase = true)) {
+                                        conditionsInput = "$current, $condition"
+                                    }
+                                },
+                                label = { Text(condition, fontSize = 11.sp) },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = Color(0xFFF3F4F9),
+                                    labelColor = Color(0xFF001D36)
+                                )
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFFDDE3EA), thickness = 1.dp)
+
+                // Recommended goals computation trigger
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Checkbox(
+                            checked = autoApplyRecommendation,
+                            onCheckedChange = { autoApplyRecommendation = it },
+                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFF0061A4)),
+                            modifier = Modifier.testTag("apply_recommend_cb")
+                        )
+                        Column {
+                            Text(
+                                text = "Recommended Macro Goals",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF191C1E)
+                            )
+                            Text(
+                                text = "Auto-calculate targets based on profile",
+                                fontSize = 10.sp,
+                                color = Color(0xFF44474E)
+                            )
+                        }
+                    }
+                }
+
+                if (autoApplyRecommendation) {
+                    val h = heightInput.toFloatOrNull() ?: 170f
+                    val w = weightInput.toFloatOrNull() ?: 65f
+                    val (recCal, recProt, recFib) = viewModel.calculateRecommendedTargets(h, w, genderSelection)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFF3F4F9))
+                            .padding(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("CALORIES", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF44474E))
+                                Text("${recCal.toInt()} kcal", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0061A4))
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("PROTEIN", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF44474E))
+                                Text("${recProt.toInt()}g", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF003355))
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("FIBER", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF44474E))
+                                Text("${recFib.toInt()}g", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF625B71))
+                            }
+                        }
+                    }
+                } else {
+                    // Manual inputs for targets
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = calTarget,
+                            onValueChange = { calTarget = it },
+                            label = { Text("Calories Target (kcal)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            OutlinedTextField(
+                                value = protTarget,
+                                onValueChange = { protTarget = it },
+                                label = { Text("Protein Target (g)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = fibTarget,
+                                onValueChange = { fibTarget = it },
+                                label = { Text("Fiber Target (g)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2292,17 +2524,30 @@ fun TargetInputDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            onSave(
-                                calories.toDoubleOrNull() ?: currentCalories,
-                                protein.toDoubleOrNull() ?: currentProtein,
-                                fiber.toDoubleOrNull() ?: currentFiber
+                            val h = heightInput.toFloatOrNull() ?: heightVal
+                            val w = weightInput.toFloatOrNull() ?: weightVal
+                            viewModel.saveUserProfile(
+                                height = h,
+                                weight = w,
+                                gender = genderSelection,
+                                conditions = conditionsInput.trim(),
+                                autoApplyTargets = autoApplyRecommendation
                             )
+                            if (!autoApplyRecommendation) {
+                                val cal = calTarget.toDoubleOrNull() ?: currentCalories
+                                val prot = protTarget.toDoubleOrNull() ?: currentProtein
+                                val fib = fibTarget.toDoubleOrNull() ?: currentFiber
+                                viewModel.setTargetCalories(cal)
+                                viewModel.setTargetProtein(prot)
+                                viewModel.setTargetFiber(fib)
+                            }
+                            onDismiss()
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0061A4), contentColor = Color.White),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.testTag("target_save_btn")
+                        modifier = Modifier.testTag("profile_save_btn")
                     ) {
-                        Text("Save Changes", fontWeight = FontWeight.Bold)
+                        Text("Save & Update", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2467,6 +2712,327 @@ fun WelcomeLoginScreen(viewModel: NutriViewModel) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun DiseaseRecommendationsSection(viewModel: NutriViewModel) {
+    val state by viewModel.diseaseRecommendationsUiState.collectAsState()
+    val conditions by viewModel.userConditions.collectAsState()
+
+    if (conditions.isBlank()) return
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Color(0xFFDDE3EA)),
+        modifier = Modifier.fillMaxWidth().testTag("disease_recs_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Healing,
+                    contentDescription = "Recommendations for you",
+                    tint = Color(0xFFBA1A1A),
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "Recommended Diet for Health",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF191C1E)
+                )
+            }
+
+            Text(
+                text = "Specific whole-food suggestions tailored for your profiles: $conditions",
+                fontSize = 12.sp,
+                color = Color(0xFF44474E)
+            )
+
+            when (val s = state) {
+                is DiseaseRecommendationsUiState.Idle -> {
+                    Button(
+                        onClick = { viewModel.fetchDiseaseRecommendations() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0061A4)),
+                        modifier = Modifier.testTag("fetch_recs_btn")
+                    ) {
+                        Text("Get Recommendations")
+                    }
+                }
+                is DiseaseRecommendationsUiState.Loading -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color(0xFF0061A4))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Querying healthy food tips...", fontSize = 12.sp, color = Color(0xFF44474E))
+                    }
+                }
+                is DiseaseRecommendationsUiState.Success -> {
+                    s.recommendations.forEach { recommendation ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFBA1A1A).copy(alpha = 0.05f))
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = "For ${recommendation.condition}:",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFBA1A1A)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Recommend: " + recommendation.recommendedFoods.joinToString(", "),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF191C1E)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = recommendation.reason,
+                                fontSize = 11.sp,
+                                color = Color(0xFF44474E)
+                            )
+                        }
+                    }
+                }
+                is DiseaseRecommendationsUiState.Error -> {
+                    Text(
+                        text = s.message,
+                        color = Color(0xFFBA1A1A),
+                        fontSize = 12.sp
+                    )
+                    Button(
+                        onClick = { viewModel.fetchDiseaseRecommendations() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBA1A1A))
+                    ) {
+                        Text("Retry", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun IndianWeeklyMealPlannerSection(viewModel: NutriViewModel) {
+    val state by viewModel.weeklyMealChartUiState.collectAsState()
+    
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Color(0xFFDDE3EA)),
+        modifier = Modifier.fillMaxWidth().testTag("weekly_meal_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RestaurantMenu,
+                        contentDescription = "Indian Meal Plan",
+                        tint = Color(0xFF0061A4),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Text(
+                        text = "Indian Weekly Meal Planner",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF191C1E)
+                    )
+                }
+                
+                Text("🇮🇳", fontSize = 20.sp)
+            }
+
+            Text(
+                text = "Generate a structured weekly Indian meal chart customized precisely to your height, weight, gender, and pre-existing medical conditions.",
+                fontSize = 12.sp,
+                color = Color(0xFF44474E)
+            )
+
+            when (val s = state) {
+                is WeeklyMealChartUiState.Idle -> {
+                    Button(
+                        onClick = { viewModel.generateIndianMealPlan() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0061A4)),
+                        modifier = Modifier.fillMaxWidth().testTag("generate_meal_btn")
+                    ) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = "Auto Generator", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Generate Indian Weekly Diet Plan")
+                    }
+                }
+                is WeeklyMealChartUiState.Loading -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF0061A4))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Consulting expert Indian dietary patterns. Crafting complete weekly schedule, please wait...",
+                            fontSize = 12.sp,
+                            color = Color(0xFF44474E),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                is WeeklyMealChartUiState.Success -> {
+                    val chart = s.chart
+                    
+                    Text(
+                        text = chart.description,
+                        fontSize = 12.sp,
+                        color = Color(0xFF003355),
+                        fontStyle = FontStyle.Italic,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFD1E4FF).copy(alpha = 0.4f))
+                            .padding(10.dp)
+                    )
+
+                    var selectedDayIndex by remember { mutableStateOf(0) }
+                    val days = chart.days
+
+                    if (days.isNotEmpty()) {
+                        // Horizontal Daily Selector
+                        ScrollableTabRow(
+                            selectedTabIndex = selectedDayIndex,
+                            containerColor = Color.Transparent,
+                            contentColor = Color(0xFF0061A4),
+                            edgePadding = 0.dp,
+                            divider = {},
+                            indicator = {}
+                        ) {
+                            days.forEachIndexed { idx, item ->
+                                val isSelected = selectedDayIndex == idx
+                                Tab(
+                                    selected = isSelected,
+                                    onClick = { selectedDayIndex = idx },
+                                    modifier = Modifier.testTag("meal_day_tab_${item.day}")
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(if (isSelected) Color(0xFF0061A4) else Color(0xFFF3F4F9))
+                                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = item.day,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isSelected) Color.White else Color(0xFF44474E)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        val dayPlan = days.getOrNull(selectedDayIndex) ?: days[0]
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            MealRowItem(type = "🌅 BREAKFAST", meal = dayPlan.breakfast)
+                            MealRowItem(type = "🍛 LUNCH", meal = dayPlan.lunch)
+                            MealRowItem(type = "☕ EVENING SNACK", meal = dayPlan.snacks)
+                            MealRowItem(type = "🍽️ DINNER", meal = dayPlan.dinner)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    OutlinedButton(
+                        onClick = { viewModel.generateIndianMealPlan() },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0061A4)),
+                        border = BorderStroke(1.dp, Color(0xFF0061A4)),
+                        modifier = Modifier.fillMaxWidth().testTag("regenerate_meal_btn")
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Regenerate", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Regenerate Indian Meal Plan", fontWeight = FontWeight.Bold)
+                    }
+                }
+                is WeeklyMealChartUiState.Error -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = s.message,
+                            color = Color(0xFFBA1A1A),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { viewModel.generateIndianMealPlan() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFBA1A1A))
+                        ) {
+                            Text("Retry Meal Planning", color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MealRowItem(type: String, meal: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFF3F4F9))
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = type,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0061A4),
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = meal,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF191C1E)
+            )
         }
     }
 }

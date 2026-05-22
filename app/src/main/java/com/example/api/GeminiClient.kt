@@ -285,4 +285,168 @@ object GeminiClient {
             return@withContext null
         }
     }
+
+    suspend fun generateWeeklyMealChart(
+        heightCm: Float,
+        weightKg: Float,
+        gender: String,
+        diseases: String
+    ): WeeklyMealChartResult? = withContext(Dispatchers.IO) {
+        val apiKey = getApiKey()
+        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+            Log.e(TAG, "Gemini API Key is empty or placeholder!")
+            return@withContext null
+        }
+
+        val prompt = """
+            You are an expert Indian clinical nutritionist.
+            Generate a personalized Indian Weekly Meal Chart (Monday to Sunday) for a user with the following profile:
+            - Gender: $gender
+            - Height: $heightCm cm
+            - Weight: $weightKg kg
+            - Pre-existing medical conditions/deficiencies/diseases: ${diseases.ifBlank { "None" }}
+
+            Make sure the recommended foods are healthy, traditional, and easily available Indian meals (including items like Roti, Sabzi, Poha, Idli, Dal, Paneer, Khichdi, etc.) fitted to help their conditions.
+
+            Return ONLY a valid JSON object matching this schema:
+            {
+              "title": "Personalized Indian Meal Plan",
+              "description": "Short explanation of the customized diet goals based on conditions.",
+              "days": [
+                {
+                  "day": "Monday",
+                  "breakfast": "Oats Upma with veggies (Protein: 8g, Fiber: 5g)",
+                  "lunch": "2 Roti, Moong Dal, Mixed Veg curry (Protein: 15g, Fiber: 8g)",
+                  "dinner": "Paneer bhurji with 1 Roti (Protein: 20g, Fiber: 4g)",
+                  "snacks": "Roasted Chana (Protein: 6g, Fiber: 3g)"
+                }
+              ]
+            }
+            Ensure you include entries for all 7 days of the week: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday.
+            Do not include any markdown format tags like ```json or anything else. Just the raw JSON content!
+        """.trimIndent()
+
+        val requestBodyObj = GenerateContentRequest(
+            contents = listOf(
+                Content(
+                    parts = listOf(Part(text = prompt))
+                )
+            ),
+            generationConfig = GenerationConfig(
+                responseMimeType = "application/json",
+                temperature = 0.3f
+            )
+        )
+
+        try {
+            val jsonAdapter = moshi.adapter(GenerateContentRequest::class.java)
+            val jsonReq = jsonAdapter.toJson(requestBodyObj)
+
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = jsonReq.toRequestBody(mediaType)
+
+            val request = Request.Builder()
+                .url("$BASE_URL?key=$apiKey")
+                .post(requestBody)
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val responseBodyStr = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                Log.e(TAG, "Meal chart query failed code: ${response.code}, body: $responseBodyStr")
+                return@withContext null
+            }
+
+            val responseAdapter = moshi.adapter(GenerateContentResponse::class.java)
+            val responseObj = responseAdapter.fromJson(responseBodyStr)
+            val textResult = responseObj?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+
+            if (textResult != null) {
+                Log.d(TAG, "Raw Meal Chart response: $textResult")
+                val resultAdapter = moshi.adapter(WeeklyMealChartResult::class.java)
+                return@withContext resultAdapter.fromJson(textResult)
+            } else {
+                Log.e(TAG, "Empty text result in candidates!")
+                return@withContext null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error generating meal chart: ${e.message}", e)
+            return@withContext null
+        }
+    }
+
+    suspend fun getRecommendationsForConditions(conditions: String): DiseaseFoodRecommendationsResult? = withContext(Dispatchers.IO) {
+        val apiKey = getApiKey()
+        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+            Log.e(TAG, "Gemini API Key is empty or placeholder!")
+            return@withContext null
+        }
+
+        val prompt = """
+            Analyze these pre-existing conditions/deficiencies/diseases: "$conditions".
+            Identify 3-5 nutrient-dense or medicinal whole foods to recommend for each condition, along with a short scientific reasoning (e.g. "contains iron to boost RBC count").
+            
+            Return ONLY a valid JSON object matching this schema:
+            {
+              "recommendations": [
+                {
+                  "condition": "Iron Deficiency",
+                  "recommendedFoods": ["Spinach", "Beetroot", "Pomegranate", "Lentils"],
+                  "reason": "Rich in non-heme iron and vitamin C to enhance iron absorption and hemoglobin production."
+                }
+              ]
+            }
+            Do not include any markdown format tags like ```json or anything else. Just the raw JSON content!
+        """.trimIndent()
+
+        val requestBodyObj = GenerateContentRequest(
+            contents = listOf(
+                Content(
+                    parts = listOf(Part(text = prompt))
+                )
+            ),
+            generationConfig = GenerationConfig(
+                responseMimeType = "application/json",
+                temperature = 0.2f
+            )
+        )
+
+        try {
+            val jsonAdapter = moshi.adapter(GenerateContentRequest::class.java)
+            val jsonReq = jsonAdapter.toJson(requestBodyObj)
+
+            val mediaType = "application/json; charset=utf-8".toMediaType()
+            val requestBody = jsonReq.toRequestBody(mediaType)
+
+            val request = Request.Builder()
+                .url("$BASE_URL?key=$apiKey")
+                .post(requestBody)
+                .build()
+
+            val response = okHttpClient.newCall(request).execute()
+            val responseBodyStr = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                Log.e(TAG, "Query failed code: ${response.code}, body: $responseBodyStr")
+                return@withContext null
+            }
+
+            val responseAdapter = moshi.adapter(GenerateContentResponse::class.java)
+            val responseObj = responseAdapter.fromJson(responseBodyStr)
+            val textResult = responseObj?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+
+            if (textResult != null) {
+                Log.d(TAG, "Raw food recommendations response: $textResult")
+                val resultAdapter = moshi.adapter(DiseaseFoodRecommendationsResult::class.java)
+                return@withContext resultAdapter.fromJson(textResult)
+            } else {
+                Log.e(TAG, "Empty text result in candidates!")
+                return@withContext null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error: ${e.message}", e)
+            return@withContext null
+        }
+    }
 }
