@@ -75,12 +75,17 @@ data class VitaminDeficiencyResult(
 )
 
 @JsonClass(generateAdapter = true)
-data class FoodAnalysisResult(
+data class FoodAnalysisItem(
     val foodName: String,
     val calories: Double,
     val protein: Double,
     val fiber: Double,
     val vitamins: String
+)
+
+@JsonClass(generateAdapter = true)
+data class FoodAnalysisResult(
+    val items: List<FoodAnalysisItem>
 )
 
 // Dynamic Indian Weekly Meal Chart Models

@@ -48,11 +48,7 @@ sealed interface AiCalculateUiState {
     object Idle : AiCalculateUiState
     object Loading : AiCalculateUiState
     data class Success(
-        val foodName: String,
-        val calories: Double,
-        val protein: Double,
-        val fiber: Double,
-        val vitamins: String
+        val items: List<com.example.api.model.FoodAnalysisItem>
     ) : AiCalculateUiState
     data class Error(val message: String) : AiCalculateUiState
 }
@@ -419,13 +415,9 @@ class NutriViewModel(
         viewModelScope.launch {
             try {
                 val result = GeminiClient.analyzeFoodText(foodDescription)
-                if (result != null) {
+                if (result != null && result.items.isNotEmpty()) {
                     _aiCalculateUiState.value = AiCalculateUiState.Success(
-                        foodName = result.foodName,
-                        calories = result.calories,
-                        protein = result.protein,
-                        fiber = result.fiber,
-                        vitamins = result.vitamins
+                        items = result.items
                     )
                     onCompleted(true)
                 } else {

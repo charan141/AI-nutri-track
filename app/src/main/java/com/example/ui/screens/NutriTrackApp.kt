@@ -2397,6 +2397,8 @@ fun ManualAddDialog(
     var aiInputText by remember { mutableStateOf("") }
     val aiState by viewModel.aiCalculateUiState.collectAsState()
 
+    var parsedItems by remember { mutableStateOf<List<com.example.api.model.FoodAnalysisItem>>(emptyList()) }
+
     // Reset state on start
     LaunchedEffect(Unit) {
         viewModel.resetAiCalculateState()
@@ -2406,11 +2408,21 @@ fun ManualAddDialog(
     LaunchedEffect(aiState) {
         if (aiState is com.example.ui.viewmodel.AiCalculateUiState.Success) {
             val success = aiState as com.example.ui.viewmodel.AiCalculateUiState.Success
-            name = success.foodName
-            calories = success.calories.toInt().toString()
-            protein = success.protein.toString()
-            fiber = success.fiber.toString()
-            vitamins = success.vitamins
+            parsedItems = success.items
+            if (success.items.size == 1) {
+                val singleObj = success.items.first()
+                name = singleObj.foodName
+                calories = singleObj.calories.toInt().toString()
+                protein = singleObj.protein.toString()
+                fiber = singleObj.fiber.toString()
+                vitamins = singleObj.vitamins
+            } else {
+                name = ""
+                calories = ""
+                protein = ""
+                fiber = ""
+                vitamins = ""
+            }
         }
     }
 
@@ -2421,12 +2433,13 @@ fun ManualAddDialog(
             border = BorderStroke(1.dp, Color(0xFFDDE3EA)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            CompositionLocalProvider(LocalContentColor provides Color(0xFF191C1E)) {
+                Column(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2537,85 +2550,215 @@ fun ManualAddDialog(
 
                 HorizontalDivider(color = Color(0xFFDDE3EA), modifier = Modifier.padding(vertical = 4.dp))
 
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Food Name") },
-                    placeholder = { Text("E.g. Grilled Chicken Salad") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0061A4),
-                        focusedLabelColor = Color(0xFF0061A4),
-                        unfocusedBorderColor = Color(0xFFC4C6D0),
-                        unfocusedTextColor = Color(0xFF191C1E),
-                        focusedTextColor = Color(0xFF191C1E)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("manual_name_tf")
-                )
+                if (parsedItems.size > 1) {
+                    // Display multiple items editor layout
+                    Text(
+                        text = "Identified ${parsedItems.size} Separate Items:",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF001D36)
+                    )
+                    
+                    parsedItems.forEachIndexed { index, item ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF3F4F9)),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFFDDE3EA)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${index + 1}. ${item.foodName}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF191C1E)
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            parsedItems = parsedItems.filterIndexed { idx, _ -> idx != index }
+                                        },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Remove Item",
+                                            tint = Color(0xFFBA1A1A),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedTextField(
+                                        value = item.calories.toInt().toString(),
+                                        onValueChange = { newVal ->
+                                            val calVal = newVal.toDoubleOrNull() ?: 0.0
+                                            parsedItems = parsedItems.mapIndexed { idx, oldItem ->
+                                                if (idx == index) oldItem.copy(calories = calVal) else oldItem
+                                            }
+                                        },
+                                        label = { Text("kcal", fontSize = 10.sp) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = Color(0xFF0061A4),
+                                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                                            focusedTextColor = Color(0xFF191C1E),
+                                            unfocusedTextColor = Color(0xFF191C1E),
+                                            focusedContainerColor = Color.White,
+                                            unfocusedContainerColor = Color.White
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = item.protein.toString(),
+                                        onValueChange = { newVal ->
+                                            val protVal = newVal.toDoubleOrNull() ?: 0.0
+                                            parsedItems = parsedItems.mapIndexed { idx, oldItem ->
+                                                if (idx == index) oldItem.copy(protein = protVal) else oldItem
+                                            }
+                                        },
+                                        label = { Text("protein (g)", fontSize = 10.sp) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = Color(0xFF0061A4),
+                                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                                            focusedTextColor = Color(0xFF191C1E),
+                                            unfocusedTextColor = Color(0xFF191C1E),
+                                            focusedContainerColor = Color.White,
+                                            unfocusedContainerColor = Color.White
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    OutlinedTextField(
+                                        value = item.fiber.toString(),
+                                        onValueChange = { newVal ->
+                                            val fibVal = newVal.toDoubleOrNull() ?: 0.0
+                                            parsedItems = parsedItems.mapIndexed { idx, oldItem ->
+                                                if (idx == index) oldItem.copy(fiber = fibVal) else oldItem
+                                            }
+                                        },
+                                        label = { Text("fiber (g)", fontSize = 10.sp) },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = Color(0xFF0061A4),
+                                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                                            focusedTextColor = Color(0xFF191C1E),
+                                            unfocusedTextColor = Color(0xFF191C1E),
+                                            focusedContainerColor = Color.White,
+                                            unfocusedContainerColor = Color.White
+                                        ),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Standard manual text fields
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Food Name") },
+                        placeholder = { Text("E.g. Grilled Chicken Salad") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0061A4),
+                            focusedLabelColor = Color(0xFF0061A4),
+                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                            unfocusedTextColor = Color(0xFF191C1E),
+                            focusedTextColor = Color(0xFF191C1E),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("manual_name_tf")
+                    )
 
-                OutlinedTextField(
-                    value = calories,
-                    onValueChange = { calories = it },
-                    label = { Text("Calories (kcal)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0061A4),
-                        focusedLabelColor = Color(0xFF0061A4),
-                        unfocusedBorderColor = Color(0xFFC4C6D0),
-                        unfocusedTextColor = Color(0xFF191C1E),
-                        focusedTextColor = Color(0xFF191C1E)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("manual_cal_tf")
-                )
+                    OutlinedTextField(
+                        value = calories,
+                        onValueChange = { calories = it },
+                        label = { Text("Calories (kcal)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0061A4),
+                            focusedLabelColor = Color(0xFF0061A4),
+                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                            unfocusedTextColor = Color(0xFF191C1E),
+                            focusedTextColor = Color(0xFF191C1E),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("manual_cal_tf")
+                    )
 
-                OutlinedTextField(
-                    value = protein,
-                    onValueChange = { protein = it },
-                    label = { Text("Protein (g)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0061A4),
-                        focusedLabelColor = Color(0xFF0061A4),
-                        unfocusedBorderColor = Color(0xFFC4C6D0),
-                        unfocusedTextColor = Color(0xFF191C1E),
-                        focusedTextColor = Color(0xFF191C1E)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("manual_protein_tf")
-                )
+                    OutlinedTextField(
+                        value = protein,
+                        onValueChange = { protein = it },
+                        label = { Text("Protein (g)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0061A4),
+                            focusedLabelColor = Color(0xFF0061A4),
+                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                            unfocusedTextColor = Color(0xFF191C1E),
+                            focusedTextColor = Color(0xFF191C1E),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("manual_protein_tf")
+                    )
 
-                OutlinedTextField(
-                    value = fiber,
-                    onValueChange = { fiber = it },
-                    label = { Text("Fiber (g)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0061A4),
-                        focusedLabelColor = Color(0xFF0061A4),
-                        unfocusedBorderColor = Color(0xFFC4C6D0),
-                        unfocusedTextColor = Color(0xFF191C1E),
-                        focusedTextColor = Color(0xFF191C1E)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("manual_fiber_tf")
-                )
+                    OutlinedTextField(
+                        value = fiber,
+                        onValueChange = { fiber = it },
+                        label = { Text("Fiber (g)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0061A4),
+                            focusedLabelColor = Color(0xFF0061A4),
+                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                            unfocusedTextColor = Color(0xFF191C1E),
+                            focusedTextColor = Color(0xFF191C1E),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("manual_fiber_tf")
+                    )
 
-                OutlinedTextField(
-                    value = vitamins,
-                    onValueChange = { vitamins = it },
-                    label = { Text("Primary Vitamins & Minerals") },
-                    placeholder = { Text("E.g. Vitamin C, Calcium, Zinc") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF0061A4),
-                        focusedLabelColor = Color(0xFF0061A4),
-                        unfocusedBorderColor = Color(0xFFC4C6D0),
-                        unfocusedTextColor = Color(0xFF191C1E),
-                        focusedTextColor = Color(0xFF191C1E)
-                    ),
-                    modifier = Modifier.fillMaxWidth().testTag("manual_vitamins_tf")
-                )
+                    OutlinedTextField(
+                        value = vitamins,
+                        onValueChange = { vitamins = it },
+                        label = { Text("Primary Vitamins & Minerals") },
+                        placeholder = { Text("E.g. Vitamin C, Calcium, Zinc") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF0061A4),
+                            focusedLabelColor = Color(0xFF0061A4),
+                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                            unfocusedTextColor = Color(0xFF191C1E),
+                            focusedTextColor = Color(0xFF191C1E),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("manual_vitamins_tf")
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -2630,23 +2773,40 @@ fun ManualAddDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            if (name.isNotBlank()) {
-                                onAdd(
-                                    name,
-                                    calories.toDoubleOrNull() ?: 0.0,
-                                    protein.toDoubleOrNull() ?: 0.0,
-                                    fiber.toDoubleOrNull() ?: 0.0,
-                                    vitamins
-                                )
+                            if (parsedItems.size > 1) {
+                                parsedItems.forEach { item ->
+                                    if (item.foodName.isNotBlank()) {
+                                        onAdd(
+                                            item.foodName,
+                                            item.calories,
+                                            item.protein,
+                                            item.fiber,
+                                            item.vitamins
+                                        )
+                                    }
+                                }
+                                onDismiss()
+                            } else {
+                                if (name.isNotBlank()) {
+                                    onAdd(
+                                        name,
+                                        calories.toDoubleOrNull() ?: 0.0,
+                                        protein.toDoubleOrNull() ?: 0.0,
+                                        fiber.toDoubleOrNull() ?: 0.0,
+                                        vitamins
+                                    )
+                                    onDismiss()
+                                }
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0061A4), contentColor = Color.White),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.testTag("manual_add_save_btn")
                     ) {
-                        Text("Add to Log", fontWeight = FontWeight.Bold)
+                        Text(if (parsedItems.size > 1) "Add All ${parsedItems.size} Items" else "Add to Log", fontWeight = FontWeight.Bold)
                     }
                 }
+            }
             }
         }
     }
@@ -2689,12 +2849,13 @@ fun ProfileAndTargetDialog(
                 .fillMaxWidth()
                 .padding(vertical = 12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(18.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
+            CompositionLocalProvider(LocalContentColor provides Color(0xFF191C1E)) {
+                Column(
+                    modifier = Modifier
+                        .padding(18.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2731,7 +2892,13 @@ fun ProfileAndTargetDialog(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF0061A4),
-                            focusedLabelColor = Color(0xFF0061A4)
+                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                            focusedLabelColor = Color(0xFF0061A4),
+                            unfocusedLabelColor = Color(0xFF44474E),
+                            focusedTextColor = Color(0xFF191C1E),
+                            unfocusedTextColor = Color(0xFF191C1E),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
                         ),
                         modifier = Modifier
                             .weight(1f)
@@ -2746,7 +2913,13 @@ fun ProfileAndTargetDialog(
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF0061A4),
-                            focusedLabelColor = Color(0xFF0061A4)
+                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                            focusedLabelColor = Color(0xFF0061A4),
+                            unfocusedLabelColor = Color(0xFF44474E),
+                            focusedTextColor = Color(0xFF191C1E),
+                            unfocusedTextColor = Color(0xFF191C1E),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
                         ),
                         modifier = Modifier
                             .weight(1f)
@@ -2820,10 +2993,16 @@ fun ProfileAndTargetDialog(
                     OutlinedTextField(
                         value = conditionsInput,
                         onValueChange = { conditionsInput = it },
-                        placeholder = { Text("e.g. Anemia, Diabetes, Vitamin D Deficiency") },
+                        placeholder = { Text("e.g. Anemia, Diabetes, Vitamin D Deficiency", color = Color(0xFF74777F)) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color(0xFF0061A4),
-                            focusedLabelColor = Color(0xFF0061A4)
+                            unfocusedBorderColor = Color(0xFFC4C6D0),
+                            focusedLabelColor = Color(0xFF0061A4),
+                            unfocusedLabelColor = Color(0xFF44474E),
+                            focusedTextColor = Color(0xFF191C1E),
+                            unfocusedTextColor = Color(0xFF191C1E),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2940,8 +3119,13 @@ fun ProfileAndTargetDialog(
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = Color(0xFF0061A4),
+                                unfocusedBorderColor = Color(0xFFC4C6D0),
                                 focusedLabelColor = Color(0xFF0061A4),
-                                unfocusedBorderColor = Color(0xFFC4C6D0)
+                                unfocusedLabelColor = Color(0xFF44474E),
+                                focusedTextColor = Color(0xFF191C1E),
+                                unfocusedTextColor = Color(0xFF191C1E),
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White
                             ),
                             modifier = Modifier.fillMaxWidth().testTag("profile_cal_target_tf")
                         )
@@ -2954,8 +3138,13 @@ fun ProfileAndTargetDialog(
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color(0xFF0061A4),
+                                    unfocusedBorderColor = Color(0xFFC4C6D0),
                                     focusedLabelColor = Color(0xFF0061A4),
-                                    unfocusedBorderColor = Color(0xFFC4C6D0)
+                                    unfocusedLabelColor = Color(0xFF44474E),
+                                    focusedTextColor = Color(0xFF191C1E),
+                                    unfocusedTextColor = Color(0xFF191C1E),
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White
                                 ),
                                 modifier = Modifier.weight(1f).testTag("profile_protein_target_tf")
                             )
@@ -2967,8 +3156,13 @@ fun ProfileAndTargetDialog(
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedBorderColor = Color(0xFF0061A4),
+                                    unfocusedBorderColor = Color(0xFFC4C6D0),
                                     focusedLabelColor = Color(0xFF0061A4),
-                                    unfocusedBorderColor = Color(0xFFC4C6D0)
+                                    unfocusedLabelColor = Color(0xFF44474E),
+                                    focusedTextColor = Color(0xFF191C1E),
+                                    unfocusedTextColor = Color(0xFF191C1E),
+                                    focusedContainerColor = Color.White,
+                                    unfocusedContainerColor = Color.White
                                 ),
                                 modifier = Modifier.weight(1f).testTag("profile_fiber_target_tf")
                             )
@@ -3015,6 +3209,7 @@ fun ProfileAndTargetDialog(
                         Text("Save & Update", fontWeight = FontWeight.Bold)
                     }
                 }
+            }
             }
         }
     }

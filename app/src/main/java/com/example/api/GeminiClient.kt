@@ -219,21 +219,26 @@ object GeminiClient {
 
         val prompt = """
             You are an expert food nutritionist.
-            Analyze this specified food item or meal: "$foodDescription".
-            Estimate and calculate:
-            1. Short, friendly name of the food item or combined meal (foodName, e.g. "Scrambled Eggs with Avocado").
+            Analyze this specified food text which may contain one or multiple food items or a combined meal: "$foodDescription".
+            Break down the text into separate individual food items if possible (e.g., if the user says "3 chapatis and green salad", return two separate items: the chapatis as one item, the salad as another).
+            For each individual food item, estimate and calculate:
+            1. Short, friendly name of the food item (foodName, e.g. "Wheat Roti" or "Green Salad").
             2. Total calories in kcal (calories).
             3. Total protein content in grams (protein).
             4. Total dietary fiber content in grams (fiber).
-            5. Primary vitamins present in significant amounts (vitamins, e.g. "Vitamin A, Vitamin B12, Potassium, Iron" or "None"). Keep it brief as a comma-separated list.
+            5. Primary vitamins present in significant amounts (vitamins, e.g. "Vitamin B1, Iron" or "None"). Keep it brief as a comma-separated list.
             
             Return ONLY a valid JSON object matching this schema:
             {
-              "foodName": "Food Name Here",
-              "calories": 250.0,
-              "protein": 12.5,
-              "fiber": 4.5,
-              "vitamins": "Vitamin B12, Vitamin D, Zinc"
+              "items": [
+                {
+                  "foodName": "Food Name Here",
+                  "calories": 250.0,
+                  "protein": 12.5,
+                  "fiber": 4.5,
+                  "vitamins": "Vitamin B12, Vitamin D, Zinc"
+                }
+              ]
             }
             Do not include any markdown format tags like ```json or anything else. Just the raw JSON content!
         """.trimIndent()
@@ -693,92 +698,115 @@ object GeminiClient {
     }
 
     fun generateLocalFoodAnalysis(foodDescription: String): FoodAnalysisResult {
-        val lower = foodDescription.lowercase()
-        return when {
-            lower.contains("egg") -> FoodAnalysisResult(
-                foodName = "Egg Dish (Scrambled/Boiled)",
-                calories = 140.0,
-                protein = 12.0,
-                fiber = 0.0,
-                vitamins = "Vitamin D, Vitamin B12, Riboflavin"
-            )
-            lower.contains("chicken") -> FoodAnalysisResult(
-                foodName = "Chicken Dish (Grilled/Cooked)",
-                calories = 220.0,
-                protein = 26.0,
-                fiber = 0.0,
-                vitamins = "Niacin, Vitamin B6, Selenium"
-            )
-            lower.contains("roti") || lower.contains("chapati") -> FoodAnalysisResult(
-                foodName = "Wheat Roti / Chapati",
-                calories = 120.0,
-                protein = 3.5,
-                fiber = 2.4,
-                vitamins = "Vitamin B1, Iron, Magnesium"
-            )
-            lower.contains("rice") -> FoodAnalysisResult(
-                foodName = "Steamed Rice Bowl",
-                calories = 200.0,
-                protein = 4.0,
-                fiber = 1.0,
-                vitamins = "Thiamine, Iron"
-            )
-            lower.contains("paneer") -> FoodAnalysisResult(
-                foodName = "Paneer Cooked Dish",
-                calories = 260.0,
-                protein = 18.0,
-                fiber = 0.5,
-                vitamins = "Calcium, Vitamin B12, Phosphorus"
-            )
-            lower.contains("dal") -> FoodAnalysisResult(
-                foodName = "Lentils Cooked (Dal)",
-                calories = 150.0,
-                protein = 9.0,
-                fiber = 4.5,
-                vitamins = "Folate, Iron, Potassium"
-            )
-            lower.contains("apple") -> FoodAnalysisResult(
-                foodName = "Fresh Red Apple",
-                calories = 95.0,
-                protein = 0.5,
-                fiber = 4.4,
-                vitamins = "Vitamin C, Potassium"
-            )
-            lower.contains("banana") -> FoodAnalysisResult(
-                foodName = "Ripe Banana",
-                calories = 105.0,
-                protein = 1.3,
-                fiber = 3.1,
-                vitamins = "Vitamin B6, Vitamin C, Potassium"
-            )
-            lower.contains("milk") -> FoodAnalysisResult(
-                foodName = "Glass of Whole Milk",
-                calories = 150.0,
-                protein = 8.0,
-                fiber = 0.0,
-                vitamins = "Calcium, Vitamin D, Riboflavin"
-            )
-            lower.contains("salad") -> FoodAnalysisResult(
-                foodName = "Mixed Vegetables Salad",
-                calories = 50.0,
-                protein = 1.5,
-                fiber = 3.0,
-                vitamins = "Vitamin A, Vitamin K, Vitamin C"
-            )
-            else -> {
-                val hashValue = kotlin.math.abs(foodDescription.hashCode())
-                val estCalories = 100.0 + (hashValue % 250)
-                val estProtein = 2.0 + (hashValue % 18)
-                val estFiber = (hashValue % 6).toDouble()
-                FoodAnalysisResult(
-                    foodName = foodDescription.take(24).replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() },
-                    calories = estCalories,
-                    protein = estProtein,
-                    fiber = estFiber,
-                    vitamins = "Vitamin B6, Iron, Magnesium"
+        val itemsList = mutableListOf<FoodAnalysisItem>()
+        val parts = foodDescription.split(Regex(",|\\band\\b|\\bwith\\b|\\+|\\balso\\b|\\bthen\\b", RegexOption.IGNORE_CASE))
+        
+        for (part in parts) {
+            val trimmed = part.trim()
+            if (trimmed.isBlank() || trimmed.lowercase() == "a" || trimmed.lowercase() == "an") continue
+            val lower = trimmed.lowercase()
+            
+            val item = when {
+                lower.contains("egg") -> FoodAnalysisItem(
+                    foodName = "Egg Dish (Scrambled/Boiled)",
+                    calories = 140.0,
+                    protein = 12.0,
+                    fiber = 0.0,
+                    vitamins = "Vitamin D, Vitamin B12, Riboflavin"
                 )
+                lower.contains("chicken") -> FoodAnalysisItem(
+                    foodName = "Chicken Dish (Grilled/Cooked)",
+                    calories = 220.0,
+                    protein = 26.0,
+                    fiber = 0.0,
+                    vitamins = "Niacin, Vitamin B6, Selenium"
+                )
+                lower.contains("roti") || lower.contains("chapati") -> FoodAnalysisItem(
+                    foodName = "Wheat Roti / Chapati",
+                    calories = 120.0,
+                    protein = 3.5,
+                    fiber = 2.4,
+                    vitamins = "Vitamin B1, Iron, Magnesium"
+                )
+                lower.contains("rice") -> FoodAnalysisItem(
+                    foodName = "Steamed Rice Bowl",
+                    calories = 200.0,
+                    protein = 4.0,
+                    fiber = 1.0,
+                    vitamins = "Thiamine, Iron"
+                )
+                lower.contains("paneer") -> FoodAnalysisItem(
+                    foodName = "Paneer Cooked Dish",
+                    calories = 260.0,
+                    protein = 18.0,
+                    fiber = 0.5,
+                    vitamins = "Calcium, Vitamin B12, Phosphorus"
+                )
+                lower.contains("dal") -> FoodAnalysisItem(
+                    foodName = "Lentils Cooked (Dal)",
+                    calories = 150.0,
+                    protein = 9.0,
+                    fiber = 4.5,
+                    vitamins = "Folate, Iron, Potassium"
+                )
+                lower.contains("apple") -> FoodAnalysisItem(
+                    foodName = "Fresh Red Apple",
+                    calories = 95.0,
+                    protein = 0.5,
+                    fiber = 4.4,
+                    vitamins = "Vitamin C, Potassium"
+                )
+                lower.contains("banana") -> FoodAnalysisItem(
+                    foodName = "Ripe Banana",
+                    calories = 105.0,
+                    protein = 1.3,
+                    fiber = 3.1,
+                    vitamins = "Vitamin B6, Vitamin C, Potassium"
+                )
+                lower.contains("milk") -> FoodAnalysisItem(
+                    foodName = "Glass of Whole Milk",
+                    calories = 150.0,
+                    protein = 8.0,
+                    fiber = 0.0,
+                    vitamins = "Calcium, Vitamin D, Riboflavin"
+                )
+                lower.contains("salad") -> FoodAnalysisItem(
+                    foodName = "Mixed Vegetables Salad",
+                    calories = 50.0,
+                    protein = 1.5,
+                    fiber = 3.0,
+                    vitamins = "Vitamin A, Vitamin K, Vitamin C"
+                )
+                else -> {
+                    val hashValue = kotlin.math.abs(trimmed.hashCode())
+                    val estCalories = 100.0 + (hashValue % 250)
+                    val estProtein = 2.0 + (hashValue % 18)
+                    val estFiber = (hashValue % 6).toDouble()
+                    FoodAnalysisItem(
+                        foodName = trimmed.take(24).replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() },
+                        calories = estCalories,
+                        protein = estProtein,
+                        fiber = estFiber,
+                        vitamins = "Vitamin B6, Iron, Magnesium"
+                    )
+                }
             }
+            itemsList.add(item)
         }
+        
+        if (itemsList.isEmpty()) {
+            itemsList.add(
+                FoodAnalysisItem(
+                    foodName = "Generic Meal Item",
+                    calories = 150.0,
+                    protein = 5.0,
+                    fiber = 1.0,
+                    vitamins = "Multivitamins"
+                )
+            )
+        }
+        
+        return FoodAnalysisResult(items = itemsList)
     }
 
     fun generateLocalVitaminDeficiency(symptoms: List<String>, otherSymptoms: String): VitaminDeficiencyResult {
