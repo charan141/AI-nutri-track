@@ -576,8 +576,9 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
                                     color = Color(0xFF001D36)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
+                                val proteinDisplay = if (totals.second % 1.0 == 0.0) "${totals.second.toInt()}g" else "${String.format(java.util.Locale.US, "%.1f", totals.second)}g"
                                 Text(
-                                    text = "${totals.second.toInt()}g",
+                                    text = proteinDisplay,
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF001D36)
@@ -617,8 +618,9 @@ fun DashboardScreen(viewModel: NutriViewModel, onNavigateToTab: (AppTab) -> Unit
                                     color = Color(0xFF1D1735)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
+                                val fiberDisplay = if (totals.third % 1.0 == 0.0) "${totals.third.toInt()}g" else "${String.format(java.util.Locale.US, "%.1f", totals.third)}g"
                                 Text(
-                                    text = "${totals.third.toInt()}g",
+                                    text = fiberDisplay,
                                     fontSize = 20.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF1D1735)

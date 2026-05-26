@@ -228,6 +228,18 @@ object GeminiClient {
             4. Total dietary fiber content in grams (fiber).
             5. Primary vitamins present in significant amounts (vitamins, e.g. "Vitamin B1, Iron" or "None"). Keep it brief as a comma-separated list.
             
+            IMPORTANT INSTRUCTIONS FOR PORTION SIZE & NUTRIENT ACCURACY:
+            - Analyze specific quantities carefully (e.g. "3 slices of bread", "2 tablespoons of butter", "1 cup of lentils", "100 grams of chicken"). Scale the calories, protein, and fiber calculations precisely based on the quantities.
+            - If no portion size or quantity is explicitly mentioned, assume a standard adult single serving size (e.g., 1 Roti, 1 bowl of salad, 1 glass of milk, 1 standard egg, etc.).
+            - Strictly adhere to standard biochemical macronutrient rules:
+              * Whole wheat Roti / Chapati: ~3.0g to 3.5g protein and ~2.0g fiber per piece. If user eats 3 chapatis, total must be ~9g-10.5g protein and ~6g fiber.
+              * Egg (Large): ~6.0g of protein and 0g of fiber. Two eggs must be ~12.0g protein.
+              * Cooked Chicken Breast: ~31.0g protein and 0g fiber per 100g.
+              * Cooked Dal (Lentils): ~5.0g-6.0g protein and ~3.0g-4.0g fiber per 100g.
+              * Vegetables / Green Salad: Very low calories (~20-40 kcal) but high in dietary fiber (~2.0g-3.0g) and low in protein (~1g).
+              * Whey Protein: ~24.0g protein per scoop (30g).
+            - Do not return default placeholder values. Calculate custom exact values scaled mathematically.
+            
             Return ONLY a valid JSON object matching this schema:
             {
               "items": [
@@ -697,6 +709,48 @@ object GeminiClient {
         return DiseaseFoodRecommendationsResult(recommendations = list)
     }
 
+    private data class BaseFoodProfile(
+        val keywords: List<String>,
+        val displayName: String,
+        val calories: Double,
+        val protein: Double,
+        val fiber: Double,
+        val vitamins: String,
+        val isWeightBased: Boolean
+    )
+
+    private val foodProfiles = listOf(
+        BaseFoodProfile(listOf("roti", "chapati", "phulka", "flatbread", "paratha", "naan"), "Whole Wheat Roti/Paratha", 100.0, 3.5, 2.0, "Vitamin B1, Iron, Magnesium", false),
+        BaseFoodProfile(listOf("white rice", "steamed rice", "boiled rice", "basmati", "rice"), "Steamed White Rice", 130.0, 2.7, 0.4, "Thiamine, Iron", true),
+        BaseFoodProfile(listOf("brown rice", "red rice", "black rice"), "Brown Cooked Rice", 110.0, 2.6, 1.8, "Fiber, B Vitamins, Magnesium", true),
+        BaseFoodProfile(listOf("dal", "lentil", "pulse", "chana", "rajma", "chole", "moong", "lentils"), "Cooked Lentils/Beans", 85.0, 5.0, 2.5, "Folate, Iron, Potassium", true),
+        BaseFoodProfile(listOf("egg", "omelet", "scrambled", "boiled egg"), "Egg", 75.0, 6.2, 0.0, "Vitamin D, B12, Phosphorus", false),
+        BaseFoodProfile(listOf("chicken", "poultry", "murgh", "turkey"), "Chicken Breast", 165.0, 31.0, 0.0, "Niacin, Vitamin B6, Selenium", true),
+        BaseFoodProfile(listOf("paneer", "cottage cheese"), "Paneer", 265.0, 18.0, 0.0, "Calcium, Vitamin B12, Phosphorus", true),
+        BaseFoodProfile(listOf("tofu", "soy cheese"), "Tofu", 80.0, 8.0, 1.0, "Calcium, Iron, Magnesium", true),
+        BaseFoodProfile(listOf("fish", "salmon", "tuna", "pomfret", "shrimp", "prawn", "seafood"), "Fish", 130.0, 22.0, 0.0, "Vitamin D, Omega-3, Selenium", true),
+        BaseFoodProfile(listOf("mutton", "lamb", "beef", "pork"), "Red Meat", 250.0, 25.0, 0.0, "Vitamin B12, Zinc, Iron", true),
+        BaseFoodProfile(listOf("salad", "cucumber", "lettuce", "veggie salad", "raw vegetable"), "Fresh Vegetable Salad", 20.0, 1.0, 2.0, "Vitamin A, Vitamin K, Vitamin C", true),
+        BaseFoodProfile(listOf("potato", "aloo", "sweet potato"), "Potato / Tubers", 90.0, 2.0, 1.5, "Vitamin C, Potassium", false),
+        BaseFoodProfile(listOf("milk", "full cream milk", "skimmed milk", "cow milk"), "Glass of Milk", 120.0, 6.5, 0.0, "Calcium, Vitamin D, B2", false),
+        BaseFoodProfile(listOf("curd", "yogurt", "dahi", "greek yogurt"), "Curd / Yogurt", 100.0, 5.0, 0.0, "Calcium, B12, Potassium", false),
+        BaseFoodProfile(listOf("oats", "oatmeal", "porridge"), "Oatmeal", 150.0, 5.0, 4.0, "Beta-Glucan, Iron, Magnesium", false),
+        BaseFoodProfile(listOf("peanut butter"), "Peanut Butter", 95.0, 3.5, 1.0, "Niacin, Vitamin E", false),
+        BaseFoodProfile(listOf("brown bread", "whole wheat bread", "multigrain bread"), "Brown Bread Slice", 75.0, 3.0, 2.0, "B Vitamins, Iron", false),
+        BaseFoodProfile(listOf("white bread", "sandwich bread", "toast", "pav", "bun"), "White Bread Slice", 70.0, 2.0, 0.6, "Calcium, Iron", false),
+        BaseFoodProfile(listOf("apple"), "Fresh Apple", 80.0, 0.3, 3.0, "Vitamin C, Fiber", false),
+        BaseFoodProfile(listOf("banana"), "Banana", 105.0, 1.3, 3.0, "Vitamin B6, Potassium", false),
+        BaseFoodProfile(listOf("almond", "walnut", "cashew", "nut", "peanuts"), "Handful of Mixed Nuts", 60.0, 2.0, 1.2, "Vitamin E, Zinc, Magnesium", false),
+        BaseFoodProfile(listOf("dosa", "masala dosa"), "Dosa", 135.0, 3.0, 1.0, "Iron, Calcium", false),
+        BaseFoodProfile(listOf("idli", "rava idli"), "Idli", 60.0, 1.5, 0.8, "Iron, B Vitamins", false),
+        BaseFoodProfile(listOf("sambhar", "sambar"), "Sambar", 100.0, 3.0, 3.0, "Vitamin A, Iron, Fiber", false),
+        BaseFoodProfile(listOf("poha", "aval"), "Poha", 250.0, 4.5, 2.5, "Iron, Carbohydrates", false),
+        BaseFoodProfile(listOf("upma", "suji upma"), "Upma", 220.0, 5.0, 2.5, "Iron, Potassium", false),
+        BaseFoodProfile(listOf("protein powder", "whey", "protein shake", "scoop of whey"), "Whey Protein Scoop", 120.0, 24.0, 0.5, "BCAA, Calcium", false),
+        BaseFoodProfile(listOf("soup", "broth"), "Vegetable Soup", 60.0, 1.5, 2.0, "Vitamin A, Vitamin C, Folate", false),
+        BaseFoodProfile(listOf("tea", "chai", "coffee", "cappuccino"), "Tea / Coffee with Milk", 45.0, 1.5, 0.0, "Calcium, Antioxidants", false)
+    )
+
     fun generateLocalFoodAnalysis(foodDescription: String): FoodAnalysisResult {
         val itemsList = mutableListOf<FoodAnalysisItem>()
         val parts = foodDescription.split(Regex(",|\\band\\b|\\bwith\\b|\\+|\\balso\\b|\\bthen\\b", RegexOption.IGNORE_CASE))
@@ -706,90 +760,81 @@ object GeminiClient {
             if (trimmed.isBlank() || trimmed.lowercase() == "a" || trimmed.lowercase() == "an") continue
             val lower = trimmed.lowercase()
             
-            val item = when {
-                lower.contains("egg") -> FoodAnalysisItem(
-                    foodName = "Egg Dish (Scrambled/Boiled)",
-                    calories = 140.0,
-                    protein = 12.0,
-                    fiber = 0.0,
-                    vitamins = "Vitamin D, Vitamin B12, Riboflavin"
-                )
-                lower.contains("chicken") -> FoodAnalysisItem(
-                    foodName = "Chicken Dish (Grilled/Cooked)",
-                    calories = 220.0,
-                    protein = 26.0,
-                    fiber = 0.0,
-                    vitamins = "Niacin, Vitamin B6, Selenium"
-                )
-                lower.contains("roti") || lower.contains("chapati") -> FoodAnalysisItem(
-                    foodName = "Wheat Roti / Chapati",
-                    calories = 120.0,
-                    protein = 3.5,
-                    fiber = 2.4,
-                    vitamins = "Vitamin B1, Iron, Magnesium"
-                )
-                lower.contains("rice") -> FoodAnalysisItem(
-                    foodName = "Steamed Rice Bowl",
-                    calories = 200.0,
-                    protein = 4.0,
-                    fiber = 1.0,
-                    vitamins = "Thiamine, Iron"
-                )
-                lower.contains("paneer") -> FoodAnalysisItem(
-                    foodName = "Paneer Cooked Dish",
-                    calories = 260.0,
-                    protein = 18.0,
-                    fiber = 0.5,
-                    vitamins = "Calcium, Vitamin B12, Phosphorus"
-                )
-                lower.contains("dal") -> FoodAnalysisItem(
-                    foodName = "Lentils Cooked (Dal)",
-                    calories = 150.0,
-                    protein = 9.0,
-                    fiber = 4.5,
-                    vitamins = "Folate, Iron, Potassium"
-                )
-                lower.contains("apple") -> FoodAnalysisItem(
-                    foodName = "Fresh Red Apple",
-                    calories = 95.0,
-                    protein = 0.5,
-                    fiber = 4.4,
-                    vitamins = "Vitamin C, Potassium"
-                )
-                lower.contains("banana") -> FoodAnalysisItem(
-                    foodName = "Ripe Banana",
-                    calories = 105.0,
-                    protein = 1.3,
-                    fiber = 3.1,
-                    vitamins = "Vitamin B6, Vitamin C, Potassium"
-                )
-                lower.contains("milk") -> FoodAnalysisItem(
-                    foodName = "Glass of Whole Milk",
-                    calories = 150.0,
-                    protein = 8.0,
-                    fiber = 0.0,
-                    vitamins = "Calcium, Vitamin D, Riboflavin"
-                )
-                lower.contains("salad") -> FoodAnalysisItem(
-                    foodName = "Mixed Vegetables Salad",
-                    calories = 50.0,
-                    protein = 1.5,
-                    fiber = 3.0,
-                    vitamins = "Vitamin A, Vitamin K, Vitamin C"
-                )
-                else -> {
-                    val hashValue = kotlin.math.abs(trimmed.hashCode())
-                    val estCalories = 100.0 + (hashValue % 250)
-                    val estProtein = 2.0 + (hashValue % 18)
-                    val estFiber = (hashValue % 6).toDouble()
-                    FoodAnalysisItem(
-                        foodName = trimmed.take(24).replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() },
-                        calories = estCalories,
-                        protein = estProtein,
-                        fiber = estFiber,
-                        vitamins = "Vitamin B6, Iron, Magnesium"
-                    )
+            // Find a matching profile
+            val matchedProfile = foodProfiles.firstOrNull { profile ->
+                profile.keywords.any { keyword -> lower.contains(keyword) }
+            }
+            
+            val item = if (matchedProfile != null) {
+                val hasGrams = lower.contains("g") || lower.contains("gram")
+                var multiplier = 1.0
+                
+                if (matchedProfile.isWeightBased) {
+                    if (hasGrams) {
+                        val gramsMatch = Regex("""(\d+(?:\.\d+)?)\s*(?:g|grams)\b""").find(lower)
+                        val grams = gramsMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 100.0
+                        multiplier = grams / 100.0
+                    } else {
+                        // Look for a general digit count (e.g. "2") and assume it's servings of 150g
+                        val countMatch = Regex("""\b(\d+(?:\.\d+)?)\b""").find(lower)
+                        val count = countMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
+                        multiplier = count * 1.5 // 1.5 multiplier maps to 150g portion
+                    }
+                } else {
+                    // Item based
+                    val countMatch = Regex("""\b(\d+(?:\.\d+)?)\b""").find(lower)
+                    var count = countMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
+                    
+                    if (count == 1.0) {
+                        count = when {
+                            lower.contains("two") || lower.contains("double") -> 2.0
+                            lower.contains("three") -> 3.0
+                            lower.contains("four") -> 4.0
+                            lower.contains("five") -> 5.0
+                            lower.contains("six") -> 6.0
+                            lower.contains("half") -> 0.5
+                            else -> 1.0
+                        }
+                    }
+                    multiplier = count
                 }
+                
+                val finalCalories = Math.round(matchedProfile.calories * multiplier * 10.0) / 10.0
+                val finalProtein = Math.round(matchedProfile.protein * multiplier * 10.0) / 10.0
+                val finalFiber = Math.round(matchedProfile.fiber * multiplier * 10.0) / 10.0
+                var finalName = if (multiplier != 1.0 && !matchedProfile.isWeightBased) {
+                    "${multiplier.toInt()}x ${matchedProfile.displayName}"
+                } else if (matchedProfile.isWeightBased && hasGrams) {
+                    val gramsMatch = Regex("""(\d+(?:\.\d+)?)\s*(?:g|grams)\b""").find(lower)
+                    val gramsVal = gramsMatch?.groupValues?.get(1)?.toInt() ?: 100
+                    "${matchedProfile.displayName} (${gramsVal}g)"
+                } else {
+                    matchedProfile.displayName
+                }
+                
+                FoodAnalysisItem(
+                    foodName = finalName,
+                    calories = finalCalories,
+                    protein = finalProtein,
+                    fiber = finalFiber,
+                    vitamins = matchedProfile.vitamins
+                )
+            } else {
+                // Heuristic-based fallback
+                val hashValue = kotlin.math.abs(trimmed.hashCode())
+                val estCalories = 100.0 + (hashValue % 250)
+                val estProtein = 2.0 + (hashValue % 18)
+                val estFiber = (hashValue % 6).toDouble()
+                
+                // Keep fallback names nice
+                val formattedName = trimmed.take(24).replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() }
+                FoodAnalysisItem(
+                    foodName = formattedName,
+                    calories = Math.round(estCalories * 10.0) / 10.0,
+                    protein = Math.round(estProtein * 10.0) / 10.0,
+                    fiber = Math.round(estFiber * 10.0) / 10.0,
+                    vitamins = "Vitamin B6, Iron, Magnesium"
+                )
             }
             itemsList.add(item)
         }
@@ -797,7 +842,7 @@ object GeminiClient {
         if (itemsList.isEmpty()) {
             itemsList.add(
                 FoodAnalysisItem(
-                    foodName = "Generic Meal Item",
+                    foodName = "Generic Healthy Item",
                     calories = 150.0,
                     protein = 5.0,
                     fiber = 1.0,
